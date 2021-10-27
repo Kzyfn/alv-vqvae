@@ -87,7 +87,7 @@ class VQVAE(nn.Module):#attentionを導入する
         ##ここまでエンコーダ
 
         self.fc12 = nn.Linear(
-            input_linguistic_dim + z_dim, input_linguistic_dim + z_dim - 2,
+            input_linguistic_dim + z_dim, input_linguistic_dim + z_dim,
         )
         self.lstm2 = nn.LSTM(
             input_linguistic_dim + z_dim,
@@ -97,7 +97,7 @@ class VQVAE(nn.Module):#attentionを導入する
             dropout=dropout,
             batch_first=True,
         )
-        self.fc3 = nn.Linear(self.num_direction * hidden_num + 2, 1)
+        self.fc3 = nn.Linear(self.num_direction * hidden_num, 1)
 
     def choose_quantized_vector(self, z):  # zはエンコーダの出力
         error = torch.sum((self.quantized_vectors.weight - z) ** 2, dim=1)
@@ -124,14 +124,12 @@ class VQVAE(nn.Module):#attentionを導入する
 
         return z
 
-    def encode(self, linguistic_f, acoustic_f, mora_index, tokyo, non_pad_mask=None, slf_attn_mask=None):
-        labels = torch.cat([torch.ones([1, linguistic_f.size()[0], 1]), torch.zeros([1, linguistic_f.size()[0], 1])], dim=2) if not tokyo else torch.cat([torch.zeros([1, linguistic_f.size()[0], 1]), torch.ones([1, linguistic_f.size()[0], 1])], dim=2)
-
+    def encode(self, linguistic_f, acoustic_f, mora_index):
         x = torch.cat([linguistic_f, acoustic_f], dim=1)
         x = self.fc11(x)
         x = F.relu(x)
         
-        out, hc = self.lstm1(torch.cat([x.view(1, x.size()[0], -1), labels.to(device)], dim=2))
+        out, hc = self.lstm1(torch.cat([x.view(1, x.size()[0], -1)], dim=2))
         mora_index_for_back = np.concatenate([[0], mora_index[:-1] + 1])
 
         if not self.use_attention:
@@ -143,10 +141,8 @@ class VQVAE(nn.Module):#attentionを導入する
 
         
         h1 = F.relu(out)
-        out = torch.cat([h1, labels.to(device)[:, :mora_index.shape[0]]], dim=2)
 
-
-        return self.fc2(out) #ここはモーラ単位しかない
+        return self.fc2(h1) #ここはモーラ単位しかない
 
     def init_codebook(self, codebook):
         self.quantized_vectors.weight = codebook
